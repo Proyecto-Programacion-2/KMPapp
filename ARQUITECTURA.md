@@ -90,6 +90,7 @@ independientes. Infraestructura de backends y dependencias: Docker Compose.
 | Registro/login de usuarios finales | Vive en CatalogAndSync (emite JWT de usuario); TurnosYReservas valida el JWT y deriva `externalPatientId` | PS §3.2, §9; IR §2.1 |
 | Entorno de desarrollo/pruebas | Stub local de catedra en Docker Compose (gobernado por IR §6-15 y §17) + verificacion contra catedra real cuando lleguen las credenciales | IR §3; PS §3 |
 | Motor de BD | PostgreSQL, instancia unica, esquemas separados (`catalog` / `turnos`), usuarios sin permisos cruzados, migraciones independientes | PS §3 |
+| Hold no se cancela manualmente | No existe endpoint de cancelacion de hold (IR §6); el hold expira segun `expiresAt` de la catedra y una copia local no extiende el TTL. Si el usuario abre otro turno, el hold anterior queda sin confirmar y expira | IR §6, §9; PS §7 |
 
 ## 4. Decisiones pendientes (NO asumir; consultar al usuario)
 
