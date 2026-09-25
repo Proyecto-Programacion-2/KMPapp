@@ -88,6 +88,7 @@ independientes. Infraestructura de backends y dependencias: Docker Compose.
 | Decision | Valor | Ref. |
 | --- | --- | --- |
 | Registro/login de usuarios finales | Vive en CatalogAndSync (emite JWT de usuario); TurnosYReservas valida el JWT y deriva `externalPatientId` | PS §3.2, §9; IR §2.1 |
+| División del servicio de catalogo y sync | Un solo deployable (exactamente dos backends, PS §3) con dos bounded contexts internos: `catalog` (lectura/busqueda y contrato hacia Turnos) y `sync` (snapshot + incremental + reconstruccion). Sync escribe el catalogo a traves del puerto compartido de persistencia para preservar la atomicidad de version | PS §3, §4.1, §6; IR §7, §14.5 |
 | Entorno de desarrollo/pruebas | Stub local de catedra en Docker Compose (gobernado por IR §6-15 y §17) + verificacion contra catedra real cuando lleguen las credenciales | IR §3; PS §3 |
 | Motor de BD | PostgreSQL, instancia unica, esquemas separados (`catalog` / `turnos`), usuarios sin permisos cruzados, migraciones independientes | PS §3 |
 | Hold no se cancela manualmente | No existe endpoint de cancelacion de hold (IR §6); el hold expira segun `expiresAt` de la catedra y una copia local no extiende el TTL. Si el usuario abre otro turno, el hold anterior queda sin confirmar y expira | IR §6, §9; PS §7 |
@@ -96,6 +97,7 @@ independientes. Infraestructura de backends y dependencias: Docker Compose.
 
 - TurnosYReservas: maquina de estados local del proceso/reserva, motor de BD y entidades internas, idempotencia/deduplicacion y manejo de mensajes fuera de orden, timeouts/backoff/limites de reintentos, origen y formato de `externalPatientId`, autenticacion interna hacia CatalogAndSync (propagar JWT de usuario vs usar JWT tecnico — PS §9), observabilidad, alcance de pruebas.
 - CatalogAndSync: motor de BD y entidades, estrategia transaccional de sincronizacion, dedup de notificaciones/cambios y deteccion de discontinuidad, uso del namespace privado de Redis `alumnos:{groupId}:*` (auxiliar, no fuente de verdad — IR §14.6), contrato interno hacia Turnos, endpoints/DTO de busqueda, alcance de pruebas.
+- CatalogAndSync (esquema del CU_2): tipo de `day_of_week` (enum Postgres + CHECK vs varchar(9) con los 7 valores exactos del contrato, IR §7), criterio e indice de busqueda por nombre de profesional (first_name + last_name, ILIKE/citext), garantia de fila unica en `catalog_version`.
 - Globales: endpoints/DTO propios entre KMP y backends, politica de errores internos, documentacion y evidencias.
 
 ## 5. Lo fijo (no se decide)
@@ -130,6 +132,7 @@ CatalogAndSync §10
 - Dedup de notificaciones/cambios, detección de discontinuidad y reconstrucción.
 - Uso (o no) del namespace privado de Redis alumnos:{groupId}:* (auxiliar, no fuente de verdad) IR §14.6.
 - Contrato interno hacia Turnos.
+- Esquema del catálogo (CU_2): enum vs varchar para day_of_week, criterio de búsqueda por nombre, fila única de catalog_version.
 
 Globales
 - ¿En cuál servicio viven las cuentas de usuarios finales y el "punto de entrada" del login?
