@@ -19,6 +19,8 @@ Versiones canonicas en la raiz: `/home/franco/Facultad/Programacion-2/`.
 
 Cada repositorio replica tambien `ARQUITECTURA.md`. Al modificar cualquiera de estos documentos, propagar el cambio a los 3 repositorios y a la raiz.
 
+El plan de desarrollo de LA APP es `MAP.md` (este repo), autocontenido. El mapa global del proyecto vive en `MAP.md` en la raiz del workspace y no se propaga.
+
 ## Pautas
 - Agente cooperador, no generador de codigo: escribir codigo solo cuando se pida; consultar antes de modificar archivos.
 - CRITICO: decisiones de organizacion de la UI y arquitectura se consultan al usuario. NUNCA asumir.

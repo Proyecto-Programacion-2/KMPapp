@@ -2,7 +2,7 @@
 
 Registro revisable de la arquitectura logica y de las decisiones adoptadas y pendientes. Este documento se actualiza cada vez que se cambie una decision arquitectural; no es un enunciado inamovible.
 
-Estado actual: los tres repositorios aun no tienen codigo. La arquitectura se define a partir de `PROJECT_STATEMENT-v1.md` (enunciado) e `INTEGRATION_REFERENCE-v2.md` (contratos de catedra, fuente de verdad para los contratos externos).
+Estado actual: la arquitectura se define a partir de `PROJECT_STATEMENT-v1.md` (enunciado) e `INTEGRATION_REFERENCE-v2.md` (contratos de catedra, fuente de verdad para los contratos externos). El unico codigo escrito es el scaffold inicial de CatalogAndSync; KMPapp y TurnosYReservas aun no tienen codigo.
 
 ## 1. Mapa logico general
 
@@ -38,7 +38,9 @@ Estado actual: los tres repositorios aun no tienen codigo. La arquitectura se de
 
 Persistencia local: PostgreSQL, una instancia, esquemas separados por servicio
 (`catalog` y `turnos`), usuarios de BD sin permisos cruzados, migraciones
-independientes. Infraestructura de backends y dependencias: Docker Compose.
+independientes. Docker Compose local DECIDIDO y AUN NO IMPLEMENTADO: cuando exista
+levantara SOLO PostgreSQL, porque Kafka, Redis y la API REST son la instancia
+central de la catedra (IR §3).
 ```
 
 ## 2. Flujo de punta a punta (usuario final → turno confirmado)
@@ -89,12 +91,14 @@ independientes. Infraestructura de backends y dependencias: Docker Compose.
 | --- | --- | --- |
 | Registro/login de usuarios finales | Vive en CatalogAndSync (emite JWT de usuario); TurnosYReservas valida el JWT y deriva `externalPatientId` | PS §3.2, §9; IR §2.1 |
 | División del servicio de catalogo y sync | Un solo deployable (exactamente dos backends, PS §3) con dos bounded contexts internos: `catalog` (lectura/busqueda y contrato hacia Turnos) y `sync` (snapshot + incremental + reconstruccion). Sync escribe el catalogo a traves del puerto compartido de persistencia para preservar la atomicidad de version | PS §3, §4.1, §6; IR §7, §14.5 |
-| Entorno de desarrollo/pruebas | Stub local de catedra en Docker Compose (gobernado por IR §6-15 y §17) + verificacion contra catedra real cuando lleguen las credenciales | IR §3; PS §3 |
+| Entorno de desarrollo/pruebas | NO hay stub, mock ni copia local del servicio de la catedra (IR §3 lo prohibe). Todo se verifica contra la instancia real. En las pruebas tampoco se emula la catedra: solo se permiten dobles de capas propias (persistencia, seguridad) y la verificacion de contrato es manual | IR §3; PS §3, §10 |
 | Motor de BD | PostgreSQL, instancia unica, esquemas separados (`catalog` / `turnos`), usuarios sin permisos cruzados, migraciones independientes | PS §3 |
+| Infraestructura local | Docker Compose con PostgreSQL. DECIDIDO pero AUN NO IMPLEMENTADO: no existe `docker-compose.yml`. Se implementa cuando la sincronizacion necesite la base de datos | PS §3; ver `MAP.md` |
 | Hold no se cancela manualmente | No existe endpoint de cancelacion de hold (IR §6); el hold expira segun `expiresAt` de la catedra y una copia local no extiende el TTL. Si el usuario abre otro turno, el hold anterior queda sin confirmar y expira | IR §6, §9; PS §7 |
 
 ## 4. Decisiones pendientes (NO asumir; consultar al usuario)
 
+- Infraestructura local: `docker-compose.yml` con PostgreSQL. La forma esta decidida, la implementacion NO: se hace cuando la sincronizacion necesite la base de datos. Antes de crearlo hay que desbloquear el entorno (grupo `docker`, plugin Compose v2) y decidir la herramienta de migraciones.
 - TurnosYReservas: maquina de estados local del proceso/reserva, motor de BD y entidades internas, idempotencia/deduplicacion y manejo de mensajes fuera de orden, timeouts/backoff/limites de reintentos, origen y formato de `externalPatientId`, autenticacion interna hacia CatalogAndSync (propagar JWT de usuario vs usar JWT tecnico — PS §9), observabilidad, alcance de pruebas.
 - CatalogAndSync: motor de BD y entidades, estrategia transaccional de sincronizacion, dedup de notificaciones/cambios y deteccion de discontinuidad, uso del namespace privado de Redis `alumnos:{groupId}:*` (auxiliar, no fuente de verdad — IR §14.6), contrato interno hacia Turnos, endpoints/DTO de busqueda, alcance de pruebas.
 - CatalogAndSync (esquema del CU_2): tipo de `day_of_week` (enum Postgres + CHECK vs varchar(9) con los 7 valores exactos del contrato, IR §7), criterio e indice de busqueda por nombre de profesional (first_name + last_name, ILIKE/citext), garantia de fila unica en `catalog_version`.
@@ -112,7 +116,7 @@ independientes. Infraestructura de backends y dependencias: Docker Compose.
 - Kafka: entrega al menos una vez, `eventId` como clave de idempotencia, message key = `reservationProcessId`, campos exactos en `AdditionalInformationSubmitted`.
 - El estado final del proceso no retrocede; los estados observados por REST y Kafka deben converger sin duplicados.
 - JWT tecnico de catedra nunca en KMP; APIs de catedra operan sobre toda la cuenta tecnica y el backend aplica la propiedad por usuario.
-- Persistencia principal en gestor de BD servidor (prohibido H2/SQLite/embebidas); infraestructura local con Docker Compose.
+- Persistencia principal en gestor de BD servidor (prohibido H2/SQLite/embebidas); la infraestructura local con Docker Compose levanta solo PostgreSQL y esta PENDIENTE de implementacion (Kafka, Redis y la API son de la catedra, IR §3).
 - Credenciales, tokens y secretos externalizados.
 
 ## Inventario de decisiones tuyas (lo que NO está fijado)
@@ -135,9 +139,8 @@ CatalogAndSync §10
 - Esquema del catálogo (CU_2): enum vs varchar para day_of_week, criterio de búsqueda por nombre, fila única de catalog_version.
 
 Globales
-- ¿En cuál servicio viven las cuentas de usuarios finales y el "punto de entrada" del login?
-- ¿Stub local de cátedra en Docker Compose para desarrollar/probar sin el entorno real, o trabajar contra cátedra real?
-- Motor/esquema de BD compartido vs instancias separadas.
+- Endpoints/DTO propios entre KMP y backends, politica de errores internos, documentacion y evidencias (ver §4).
+- Ya resuelto en §3, no se vuelve a preguntar: donde viven las cuentas de usuario final (CatalogAndSync emite el JWT), el motor/esquema de BD (PostgreSQL, esquemas separados) y el entorno de desarrollo (sin stub de catedra).
 
 ## 6. Referencias
 
@@ -145,3 +148,7 @@ Globales
 - `INTEGRATION_REFERENCE-v2.md`: IR §2, §2.1, §3, §5.1, §6, §7, §8, §9, §10, §11, §12, §13, §14.2, §14.5, §14.6, §15, §15.3-15.10, §16, §17, §18, §19.
 
 Las versiones canonicas de estos documentos viven en la raiz del proyecto. Los cambios a este archivo se propagan a los tres repositorios.
+
+## 7. Mapa de desarrollo
+
+El plan de trabajo por fases e hitos vive en `MAP.md`, en la raiz del workspace. Ese `MAP.md` es el mapa GLOBAL y **no se propaga** a los repositorios: cada repositorio tiene su propio `MAP.md`, autocontenido, con lo que corresponde desarrollar solo a ese repositorio.
